@@ -40,9 +40,11 @@ public:
     virtual void evict(SimpleRequest* req);
     virtual void evict();
     virtual SimpleRequest* evict_return();
+
 };
 
 static Factory<LRUCache> factoryLRU("LRU");
+
 
 /*
   FIFO: First-In First-Out eviction
