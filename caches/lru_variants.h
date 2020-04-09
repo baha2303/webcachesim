@@ -253,17 +253,32 @@ public:
     TinyLFU()
         : LRUCache()
     {
-        cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
-        
 
         // We have this from Cache() 
          //: _cacheSize -> setSize(cacheSize) from the script
          //_currentSize
     }
+    
     virtual ~TinyLFU()
     {
+      delete cm_sketch;
     }
 
+    
+    virtual void setSize(uint64_t cs) {
+    
+    
+        //std::cout << "CM_Init" << std::endl;
+        cm_sketch = CM_Init(cs / 4, 4, 319062105);
+        //std::cout << "CM_init  " << cm_sketch->depth <<" , " <<   cm_sketch->width << std::endl;
+       // if (!cm_sketch)
+       // std::cout << "CM fails" << std::endl;
+
+    
+        _cacheSize = cs;
+        
+        
+    }
     bool lookup(SimpleRequest* req);
     // The one from LRU is enough
 
@@ -271,7 +286,7 @@ public:
     //
 
 
-    virtual void evict(SimpleRequest* req); // maybe we don't need this
+    //virtual void evict(SimpleRequest* req); // maybe we don't need this
     virtual bool evict(int cand_id);
     virtual SimpleRequest* evict_return(int cand_id);
     //Need to be updated to support TinyLFU algorithm comparison

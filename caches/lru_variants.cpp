@@ -6,7 +6,6 @@
 #include <cassert>
 #include "lru_variants.h"
 #include "../random_helper.h"
-#include "tiny_lfu.h"
 
 // golden section search helpers
 #define SHFT2(a,b,c) (a)=(b);(b)=(c);
@@ -562,6 +561,7 @@ void S4LRUCache::evict()
 /*****HELPER FUNCTIONS******/
 
 void TinyLFU::update_tiny_lfu(long long id) {
+
     CM_Update(cm_sketch, id, 1);
 
 }
@@ -571,8 +571,12 @@ void TinyLFU::update_tiny_lfu(long long id) {
 /*****CACHE FUNCTIONS******/
 bool TinyLFU::lookup(SimpleRequest* req)
 {
+
+    
     // CacheObject: defined in cache_object.h 
     CacheObject obj(req);
+    
+    //std::cout << "looking for object id : " << obj.id << std::endl;
     // _cacheMap defined in class LRUCache in lru_variants.h 
     auto it = _cacheMap.find(obj);
     if (it != _cacheMap.end()) {
@@ -581,39 +585,11 @@ bool TinyLFU::lookup(SimpleRequest* req)
         update_tiny_lfu(obj.id);
         return true;
     }
+    //std::cout << "Not found object id : " << obj.id << std::endl;
     return false;
 }
 
-void TinyLFU::admit(SimpleRequest* req)
-{
-    const uint64_t size = req->getSize();
-    // object feasible to store?
-    if (size > _cacheSize) {
-        LOG("L", _cacheSize, req->getId(), size);
-        return;
-    }
-    // check eviction needed
-    bool evicted;
-    while (_currentSize + size > _cacheSize) {
-        evicted = evict(req->getId());
-        // TODO
-        //which to evict ? how to evict ? how to compare between victim and candidate
-    }
 
-    // admit new object
-    if (evicted) {
-        CacheObject obj(req);
-        _cacheList.push_front(obj);
-        _cacheMap[obj] = _cacheList.begin();
-        _currentSize += size;
-        LOG("a", _currentSize, obj.id, obj.size);
-        // TODO
-        // Update the TinyLFU with the new object
-        update_tiny_lfu(obj.id);
-
-    }
-
-}
 /*
 void TinyLFU::evict(SimpleRequest* req)
 {
@@ -665,6 +641,40 @@ SimpleRequest* TinyLFU::evict_return(int cand_id)
 
 bool TinyLFU::evict(int cand_id)
 {
-    return (evict_return(cand_id) == NULL ? false : true);
+    return ((evict_return(cand_id) == NULL) ? false : true);
 }
 
+void TinyLFU::admit(SimpleRequest* req)
+{
+    const uint64_t size = req->getSize();
+    // object feasible to store?
+    //std::cout << "admiting obj : size"  << size << "current size " << _currentSize << " _cacheSize" << _cacheSize << std::endl;
+    if (size > _cacheSize) {
+        LOG("L", _cacheSize, req->getId(), size);
+        return;
+    }
+    // check eviction needed
+    bool evicted=true;
+    while (_currentSize + size > _cacheSize) {
+        evicted = evict(req->getId());
+        // TODO
+        //which to evict ? how to evict ? how to compare between victim and candidate
+    }
+
+    // admit new object
+    if (evicted) {
+      //  std::cout << "admiting now" << std::endl;
+        CacheObject obj(req);
+        _cacheList.push_front(obj);
+        _cacheMap[obj] = _cacheList.begin();
+        _currentSize += size;
+        LOG("a", _currentSize, obj.id, obj.size);
+        // TODO
+        // Update the TinyLFU with the new object
+
+      //  std::cout << "updating tinylfu" << std::endl;
+        update_tiny_lfu(obj.id);
+
+    }
+
+}

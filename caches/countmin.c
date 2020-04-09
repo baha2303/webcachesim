@@ -15,6 +15,7 @@ to Creative Commons, 559 Nathan Abbott Way, Stanford, California
 *********************************************************************/
 
 #include <stdlib.h>
+#include <stdio.h>
 #include "prng.h"
 #include "massdal.h"
 #include "countmin.h"
@@ -125,9 +126,13 @@ void CM_Update(CM_type * cm, unsigned int item, int diff)
   int j;
 
   if (!cm) return;
+  //printf("CM_Update\n depth %d , width %d : ",cm->depth,cm->width);
   cm->count+=diff;
   for (j=0;j<cm->depth;j++)
     cm->counts[j][hash31(cm->hasha[j],cm->hashb[j],item) % cm->width]+=diff;
+    
+
+  //printf("CM_Update finished\n");
   // this can be done more efficiently if the width is a power of two
 }
 
@@ -451,7 +456,7 @@ CMH_type * CMH_Init(int width, int depth, int U, int gran)
 	{
 	  if (i>=cmh->freelim)
 	    { // allocate space for representing things exactly at high levels
-	      cmh->counts[i]=calloc(1<<(cmh->gran*j),sizeof(int));
+	      cmh->counts[i]=(int *)calloc(1<<(cmh->gran*j),sizeof(int));
 	      j++;
 	      cmh->hasha[i]=NULL;
 	      cmh->hashb[i]=NULL;
@@ -612,7 +617,7 @@ int * CMH_FindHH(CMH_type * cmh, int thresh)
   results[0]=0;
 
   CMH_recursive(cmh,cmh->levels,0,thresh,results);
-  return(results);
+  return((int*)results);
 }
 
 int CMH_Rangesum(CMH_type * cmh, int start, int end)

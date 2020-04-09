@@ -54,11 +54,13 @@ int main (int argc, char* argv[])
   while (infile >> t >> id >> size)
     {
         reqs++;
-        
+        //cout << "reading line" << endl;
         req->reinit(id,size);
         if(webcache->lookup(req)) {
+        cout << "obj hit "<< id << endl;
             hits++;
         } else {
+        cout << "obj miss "<< id << endl;
             webcache->admit(req);
         }
     }
