@@ -3,7 +3,7 @@
 
 
 /*
-  TinyLFU: Uses LRU for main cache and TinyLFU algorithm for victim handling
+  TinyLFU (Basic LRU-based version) -> "Uses LRU for main cache and TinyLFU algorithm for victim handling"
 */
 class  TinyLFU : public LRUCache
 {
