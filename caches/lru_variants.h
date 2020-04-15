@@ -9,6 +9,7 @@
 #include "adaptsize_const.h" /* AdaptSize constants */
 
 
+
 typedef std::list<CacheObject>::iterator ListIteratorType;
 typedef std::unordered_map<CacheObject, ListIteratorType> lruCacheMapType;
 
@@ -40,9 +41,11 @@ public:
     virtual void evict(SimpleRequest* req);
     virtual void evict();
     virtual SimpleRequest* evict_return();
+
 };
 
 static Factory<LRUCache> factoryLRU("LRU");
+
 
 /*
   FIFO: First-In First-Out eviction
@@ -207,6 +210,90 @@ public:
 };
 
 static Factory<S4LRUCache> factoryS4LRU("S4LRU");
+
+
+
+
+
+/*
+  TinyLFU (Basic LRU-based version) -> "Uses LRU for main cache and TinyLFU algorithm for victim handling"
+*/
+#include "countmin.h"
+class  TinyLFU : public LRUCache
+{
+protected:
+    // TODO
+
+    // virtual void hit(lruCacheMapType::const_iterator it, uint64_t size);
+    // do we need a simillar function to update our statistics on hit ?
+    void update_tiny_lfu(long long id);
+
+
+
+
+    // add data structures for the TinyLFU algorithm 
+
+
+
+    // add the cm sketch
+    CM_type *cm_sketch;
+
+
+    /*
+    Available CMSketch functions
+    extern void CM_Update(CM_type*, unsigned int, int);
+    extern int CM_PointEst(CM_type*, unsigned int);
+    extern int CM_PointMed(CM_type*, unsigned int);
+    extern int CM_InnerProd(CM_type*, CM_type*);
+    extern int CM_Residue(CM_type*, unsigned int*);
+    */
+
+
+public:
+    TinyLFU()
+        : LRUCache()
+    {
+
+        // We have this from Cache() 
+         //: _cacheSize -> setSize(cacheSize) from the script
+         //_currentSize
+    }
+    
+    virtual ~TinyLFU()
+    {
+      delete cm_sketch;
+    }
+
+    
+    virtual void setSize(uint64_t cs) {
+    
+    
+        //std::cout << "CM_Init" << std::endl;
+        cm_sketch = CM_Init(cs / 4, 4, 319062105);
+        //std::cout << "CM_init  " << cm_sketch->depth <<" , " <<   cm_sketch->width << std::endl;
+       // if (!cm_sketch)
+       // std::cout << "CM fails" << std::endl;
+
+    
+        _cacheSize = cs;
+        
+        
+    }
+    bool lookup(SimpleRequest* req);
+    // The one from LRU is enough
+
+    virtual void admit(SimpleRequest* req);
+    //
+
+
+    //virtual void evict(SimpleRequest* req); // maybe we don't need this
+    virtual bool evict(int cand_id);
+    virtual SimpleRequest* evict_return(int cand_id);
+    //Need to be updated to support TinyLFU algorithm comparison
+};
+
+
+static Factory<TinyLFU> factoryTinyLFU("TinyLFU");
 
 
 
