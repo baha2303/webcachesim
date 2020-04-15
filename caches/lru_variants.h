@@ -1,4 +1,3 @@
-
 #ifndef LRU_VARIANTS_H
 #define LRU_VARIANTS_H
 
@@ -8,7 +7,7 @@
 #include "cache.h"
 #include "cache_object.h"
 #include "adaptsize_const.h" /* AdaptSize constants */
-
+#include "countmin.h"
 
 
 typedef std::list<CacheObject>::iterator ListIteratorType;
@@ -215,41 +214,19 @@ static Factory<S4LRUCache> factoryS4LRU("S4LRU");
 
 
 
-
 /*
   TinyLFU (Basic LRU-based version) -> "Uses LRU for main cache and TinyLFU algorithm for victim handling"
 */
-#include "countmin.h"
+
 class  TinyLFU : public LRUCache
 {
 protected:
     // TODO
-
     // virtual void hit(lruCacheMapType::const_iterator it, uint64_t size);
     // do we need a simillar function to update our statistics on hit ?
     void update_tiny_lfu(long long id);
-
-
-
-
     // add data structures for the TinyLFU algorithm 
-
-
-
-    // add the cm sketch
     CM_type *cm_sketch;
-
-
-    /*
-    Available CMSketch functions
-    extern void CM_Update(CM_type*, unsigned int, int);
-    extern int CM_PointEst(CM_type*, unsigned int);
-    extern int CM_PointMed(CM_type*, unsigned int);
-    extern int CM_InnerProd(CM_type*, CM_type*);
-    extern int CM_Residue(CM_type*, unsigned int*);
-    */
-
-
 public:
     TinyLFU()
         : LRUCache()
@@ -262,31 +239,21 @@ public:
     
     virtual ~TinyLFU()
     {
-      delete cm_sketch;
+      CM_Destroy(cm_sketch);
     }
 
-    
     virtual void setSize(uint64_t cs) {
-    
-    
         //std::cout << "CM_Init" << std::endl;
         cm_sketch = CM_Init(cs / 4, 4, 319062105);
         //std::cout << "CM_init  " << cm_sketch->depth <<" , " <<   cm_sketch->width << std::endl;
        // if (!cm_sketch)
        // std::cout << "CM fails" << std::endl;
-
-    
         _cacheSize = cs;
-        
-        
+  
     }
+
     bool lookup(SimpleRequest* req);
-    // The one from LRU is enough
-
     virtual void admit(SimpleRequest* req);
-    //
-
-
     //virtual void evict(SimpleRequest* req); // maybe we don't need this
     virtual bool evict(int cand_id);
     virtual SimpleRequest* evict_return(int cand_id);
@@ -296,6 +263,101 @@ public:
 
 static Factory<TinyLFU> factoryTinyLFU("TinyLFU");
 
+/*
+    SLRU
+*/
+class SLRUCache : public LRUCache
+{
+protected:
+    LRUCache segments[2];
 
+public:
+  CM_type *cm_sketch;
+    SLRUCache()
+        : LRUCache()     
+    {
+        segments[0] = LRUCache();
+        segments[1] = LRUCache();
+        cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
+    }
+
+    virtual ~SLRUCache()
+    {
+      CM_Destroy(cm_sketch);
+    }
+
+  
+    void update_tiny_lfu(long long id);
+    virtual void setPar(std::string parName, std::string parValue);
+    virtual void setSize(uint64_t cs);
+    virtual bool lookup(SimpleRequest* req);
+    virtual void admit(SimpleRequest* req);
+    void admit_from_window(SimpleRequest* req);
+    virtual void segment_admit(uint8_t idx, SimpleRequest* req);
+    virtual void evict(SimpleRequest* req);
+    virtual void evict();
+    SimpleRequest* evict_return(int id);
+};
+
+static Factory<SLRUCache> factorySLRU("SLRU");
+
+/*
+  W-TinyLFU 
+ W-TinyLFU Cache Policy. uses SLRU for main cache and LRU window to maintain freshness
+
+     
+*/
+class LRU : public LRUCache {
+
+    public:
+    LRU() : LRUCache() {
+
+    }
+    virtual ~LRU() {}
+    virtual bool lookup(SimpleRequest* req);
+    virtual void admit(SimpleRequest* req);
+    virtual void evict(SimpleRequest* req);
+    virtual void evict();
+    virtual SimpleRequest* evict_return() {}
+    std::list<SimpleRequest*> admit_with_return(SimpleRequest* req);
+
+};
+
+class  W_TinyLFU : public Cache
+{
+protected:
+    // TODO
+    // virtual void hit(lruCacheMapType::const_iterator it, uint64_t size);
+    // do we need a simillar function to update our statistics on hit ?
+    
+    // add data structures for the TinyLFU algorithm 
+    LRU window;
+    SLRUCache main_cache;
+    float window_size_p;
+public:
+    W_TinyLFU() : Cache()
+    {
+        window=LRU();
+        main_cache=SLRUCache();
+        window_size_p=0.01;
+        // We have this from Cache() 
+         //: _cacheSize -> setSize(cacheSize) from the script
+         //_currentSize
+    }
+    
+    virtual ~W_TinyLFU()
+    {
+    }
+
+    bool lookup(SimpleRequest* req);
+    virtual void admit(SimpleRequest* req);
+    //virtual void evict(SimpleRequest* req); // maybe we don't need this
+    //Need to be updated to support TinyLFU algorithm comparison
+    virtual void setPar(std::string parName, std::string parValue);
+    virtual void evict(SimpleRequest* req);
+    virtual void evict();
+};
+
+static Factory<W_TinyLFU> factoryW_TinyLFU("W_TinyLFU");
 
 #endif

@@ -1,4 +1,3 @@
-
 #include <unordered_map>
 #include <limits>
 #include <cmath>
@@ -95,6 +94,31 @@ void LRUCache::evict()
     evict_return();
 }
 
+std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
+    const uint64_t size = req->getSize();
+    // object feasible to store?
+    std::list<SimpleRequest*> victim_list;
+    if (size > _cacheSize) {
+        LOG("L", _cacheSize, req->getId(), size);
+        return victim_list;
+    }
+    // check eviction needed
+    while (_currentSize + size > _cacheSize) {
+        SimpleRequest* r=evict_return();
+        if(r!=NULL)
+        victim_list.push_back(r);
+    }
+    // admit new object
+    CacheObject obj(req);
+    _cacheList.push_front(obj);
+    _cacheMap[obj] = _cacheList.begin();
+    _currentSize += size;
+    LOG("a", _currentSize, obj.id, obj.size);
+}
+     bool lookup(SimpleRequest* req) {}
+     void admit(SimpleRequest* req) {}
+     void evict(SimpleRequest* req) {}
+     void evict() {}
 // const_iterator: a forward iterator to const value_type, where 
 // value_type is pair<const key_type, mapped_type>
 void LRUCache::hit(lruCacheMapType::const_iterator it, uint64_t size)
@@ -552,9 +576,9 @@ void S4LRUCache::evict()
     segments[0].evict();
 }
 
-
-
-
+//######################################################################
+//######################################################################
+//######################################################################
 /*
   TinyLFU
 */
@@ -584,29 +608,13 @@ bool TinyLFU::lookup(SimpleRequest* req)
         // log hit
         LOG("h", 0, obj.id, obj.size);
         update_tiny_lfu(obj.id);
-        //TODO
-        // lru::hit method is missing
+        hit(it, obj.size);
         return true;
     }
     //std::cout << "Not found object id : " << obj.id << std::endl;
     return false;
 }
 
-
-/*
-void TinyLFU::evict(SimpleRequest* req)
-{
-    CacheObject obj(req);
-    auto it = _cacheMap.find(obj);
-    if (it != _cacheMap.end()) {
-        ListIteratorType lit = it->second;
-        LOG("e", _currentSize, obj.id, obj.size);
-        _currentSize -= obj.size;
-        _cacheMap.erase(obj);
-        _cacheList.erase(lit);
-    }
-}
-*/
 
 SimpleRequest* TinyLFU::evict_return(int cand_id)
 {
@@ -623,7 +631,7 @@ SimpleRequest* TinyLFU::evict_return(int cand_id)
         // should this by evicted ? use the CM Sketch to decide : compare the victim with the 
 
         int victim_freq_est = CM_PointEst(cm_sketch, obj.id);
-        int candidate_freq_est = CM_PointEst(cm_sketch, obj.id);
+        int candidate_freq_est = CM_PointEst(cm_sketch, cand_id);
 
         if (victim_freq_est > candidate_freq_est) {
             _currentSize -= obj.size;
@@ -660,6 +668,7 @@ void TinyLFU::admit(SimpleRequest* req)
     bool evicted=true;
     while (_currentSize + size > _cacheSize) {
         evicted = evict(req->getId());
+		if(!evicted) break;
         // TODO
         //which to evict ? how to evict ? how to compare between victim and candidate
     }
@@ -681,3 +690,213 @@ void TinyLFU::admit(SimpleRequest* req)
     }
 
 }
+
+
+
+
+
+//######################################################################
+//######################################################################
+//######################################################################
+/*
+    SLRU -> 2 Segments LRU cache
+    Will be used as the main cahce for the W-TinyLFU
+*/
+void SLRUCache::setSize(uint64_t cs) {
+    uint64_t total = cs;
+    // The Main cache for the W-TintLFU is 2 segment LRU , 80% for the main protected segment
+    // and 20% for the propation segment
+    segments[0].setSize(cs*0.2);
+    total -= cs*0.2;  
+    segments[1].setSize(cs*0.8);
+    total -= cs*0.8;
+    // std::cerr << "setsize " << i << " : " << cs/4 << "\n";
+    if(total>0) {
+        segments[0].setSize(cs*0.2+total);
+    //std::cerr << "bonus setsize " << 0 << " : " << cs/4 + total << "\n";
+    }
+}
+
+bool SLRUCache::lookup(SimpleRequest* req)
+{
+    for(int i=0; i<2; i++) {
+        if(segments[i].lookup(req)) {
+            // hit
+            if(i==0) {
+                // move up
+                segments[i].evict(req);
+                segment_admit(i+1,req);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void SLRUCache::admit(SimpleRequest* req)
+{
+    segments[0].admit(req);
+}
+void SLRUCache::admit_from_window(SimpleRequest* req)
+{
+
+// this request comes from the window victim
+// need to compare this with a victom from the first segment an
+
+    //segments[0].admit(req);
+ 
+    const uint64_t size = req->getSize();
+    // object feasible to store?
+    //std::cout << "admiting obj : size"  << size << "current size " << _currentSize << " _cacheSize" << _cacheSize << std::endl;
+    if (size > segments[0].getSize()) {
+        LOG("L", _cacheSize, req->getId(), size);
+        return;
+    }
+    // check eviction needed
+    SimpleRequest* evicted=NULL,*prevEvicted=NULL;
+    while (segments[0].getCurrentSize() + size >segments[0].getSize()) {
+        evicted = segments[0].evict_return();
+		if(evicted==NULL) break;
+        prevEvicted=evicted;
+        // TODO
+        // which to evict ? how to evict ? how to compare between victim and candidate
+        // what if we need to evict more than one object
+    }
+
+    // admit new object
+    if (prevEvicted!=NULL) {
+      //  std::cout << "admiting now" << std::endl;
+
+
+
+        LOG("a", _currentSize, obj.id, obj.size);
+        int victim_freq_est = CM_PointEst(cm_sketch, prevEvicted->getId());
+        int candidate_freq_est = CM_PointEst(cm_sketch, req->getId());
+        // TODO
+        // Update the TinyLFU with the new object
+
+        if (victim_freq_est > candidate_freq_est) {
+            segments[0].admit(prevEvicted);
+        }
+        else {
+          segments[0].admit(req);
+        }
+
+    } else {
+
+        segments[0].admit(req);
+    }
+
+}
+
+void SLRUCache::segment_admit(uint8_t idx, SimpleRequest* req)
+{
+    if(idx==0) {
+        segments[idx].admit(req);
+    } else {
+        while(segments[idx].getCurrentSize() + req->getSize()
+              > segments[idx].getSize()) {
+            // need to evict from this partition first
+            // find least popular item in this segment
+            auto nreq = segments[idx].evict_return();
+            segment_admit(idx-1,nreq);
+        }
+        segments[idx].admit(req);
+    }
+}
+
+void SLRUCache::evict(SimpleRequest* req)
+{
+    for(int i=0; i<2; i++) {
+        segments[i].evict(req);
+    }
+}
+
+void SLRUCache::evict()
+{
+    segments[0].evict();
+}
+
+void SLRUCache::update_tiny_lfu(long long id) {
+    CM_Update(cm_sketch, id, 1);
+} 
+SimpleRequest* SLRUCache::evict_return(int id) {
+// evict least popular (i.e. last element)
+    if (segments[0].evict_return()!=NULL) {
+        
+    }
+    return NULL;
+
+}
+
+
+
+
+
+//######################################################################
+//######################################################################
+//######################################################################
+// W-TinyLFU Cache Policy. 
+// uses SLRU for main cache and LRU window to maintain freshness
+
+
+/*
+  W-TinyLFU
+*/
+
+/*****HELPER FUNCTIONS******/
+
+
+
+
+/*****CACHE FUNCTIONS******/
+bool W_TinyLFU::lookup(SimpleRequest* req)
+{
+    CacheObject obj(req);
+    if(window.lookup(req) || main_cache.lookup(req)) {
+        main_cache.update_tiny_lfu(req->getId());
+        return true;  
+    } else {
+        //std::cout << "Not found object id : " << obj.id << std::endl;
+        return false;
+    }
+
+}
+
+
+
+void W_TinyLFU::admit(SimpleRequest* req)
+{
+
+    
+    std::list<SimpleRequest*> req_list = window.admit_with_return(req);
+    if(req_list.size()==0) {
+        return;
+    } 
+
+    // if we have a victim , try to admit it to SLRU
+
+    for(auto it = req_list.begin();it != req_list.end() ; it++) {
+        main_cache.admit_from_window(*it);
+    }
+    
+}
+
+void W_TinyLFU::setPar(std::string parName, std::string parValue) {
+    if(parName.compare("window_size_p") == 0) {
+        const uint64_t n = std::stoull(parValue);
+        assert(n>0);
+        window_size_p = n/100;
+        main_cache.setSize(_cacheSize*(1-window_size_p));
+        window.setSize(_cacheSize*window_size_p);
+    } else {
+        std::cerr << "unrecognized parameter: " << parName << std::endl;
+    }
+}
+
+     void W_TinyLFU::evict(SimpleRequest* req) {}
+     void W_TinyLFU::evict() {}
+
+
+
+
