@@ -1,3 +1,4 @@
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -501,3 +502,4 @@ long double zipf(double theta, long n) {
 	return(val);
 }
 */
+

@@ -35,3 +35,4 @@ DEPS = $(OBJS:%.o=%.d)
 
 clean:
 	-rm $(TARGET) $(OBJS) $(DEPS)
+

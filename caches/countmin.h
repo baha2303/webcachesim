@@ -1,3 +1,4 @@
+
 // Two different structures: 
 //   1 -- The basic CM Sketch
 //   2 -- The hierarchical CM Sketch: with log n levels, for range sums etc. 
@@ -65,3 +66,4 @@ extern int CMH_Rangesum(CMH_type *, int, int);
 extern int CMH_FindRange(CMH_type * cmh, int);
 extern int CMH_Quantile(CMH_type *cmh,float);
 extern long long CMH_F2Est(CMH_type *);
+

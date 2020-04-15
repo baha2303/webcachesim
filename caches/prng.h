@@ -1,3 +1,4 @@
+
 // Probabilistic Random Number Generators
 // Collected from various sources by Graham Cormode, 2000-2003
 // 
@@ -50,4 +51,5 @@ extern double prng_stable(prng_type * prng, double);
 //extern double stabledevd(float) ;
 //extern long double stabledevl(float) ;
 //extern double altstab(double); 
+
 
