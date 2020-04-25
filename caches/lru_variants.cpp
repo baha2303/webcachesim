@@ -115,10 +115,7 @@ std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
     _currentSize += size;
     LOG("a", _currentSize, obj.id, obj.size);
 }
-     bool lookup(SimpleRequest* req) {}
-     void admit(SimpleRequest* req) {}
-     void evict(SimpleRequest* req) {}
-     void evict() {}
+
 // const_iterator: a forward iterator to const value_type, where 
 // value_type is pair<const key_type, mapped_type>
 void LRUCache::hit(lruCacheMapType::const_iterator it, uint64_t size)
@@ -850,6 +847,7 @@ SimpleRequest* SLRUCache::evict_return(int id) {
 
 
 /*****CACHE FUNCTIONS******/
+
 bool W_TinyLFU::lookup(SimpleRequest* req)
 {
     CacheObject obj(req);
@@ -888,7 +886,9 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
         assert(n>0);
         window_size_p = n/100;
         main_cache.setSize(_cacheSize*(1-window_size_p));
+        std::cout<< " main_C " << main_cache.getSize() << std::endl;
         window.setSize(_cacheSize*window_size_p);
+        std::cout<<" window  "  << window.getSize() << std::endl;
     } else {
         std::cerr << "unrecognized parameter: " << parName << std::endl;
     }

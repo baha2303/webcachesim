@@ -266,7 +266,7 @@ static Factory<TinyLFU> factoryTinyLFU("TinyLFU");
 /*
     SLRU
 */
-class SLRUCache : public LRUCache
+class SLRUCache : public Cache
 {
 protected:
     LRUCache segments[2];
@@ -274,28 +274,28 @@ protected:
 public:
   CM_type *cm_sketch;
     SLRUCache()
-        : LRUCache()     
+        : Cache()   
     {
         segments[0] = LRUCache();
         segments[1] = LRUCache();
-        cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
+       cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
     }
 
     virtual ~SLRUCache()
     {
-      CM_Destroy(cm_sketch);
+     CM_Destroy(cm_sketch);
     }
 
   
-    void update_tiny_lfu(long long id);
-    virtual void setPar(std::string parName, std::string parValue);
+
     virtual void setSize(uint64_t cs);
     virtual bool lookup(SimpleRequest* req);
     virtual void admit(SimpleRequest* req);
-    void admit_from_window(SimpleRequest* req);
     virtual void segment_admit(uint8_t idx, SimpleRequest* req);
     virtual void evict(SimpleRequest* req);
     virtual void evict();
+     void admit_from_window(SimpleRequest* req);
+   void update_tiny_lfu(long long id);
     SimpleRequest* evict_return(int id);
 };
 
@@ -314,10 +314,10 @@ class LRU : public LRUCache {
 
     }
     virtual ~LRU() {}
-    virtual bool lookup(SimpleRequest* req);
-    virtual void admit(SimpleRequest* req);
-    virtual void evict(SimpleRequest* req);
-    virtual void evict();
+    virtual bool lookup(SimpleRequest* req) {}
+    virtual void admit(SimpleRequest* req) {}
+    virtual void evict(SimpleRequest* req) {}
+    virtual void evict() {}
     virtual SimpleRequest* evict_return() {}
     std::list<SimpleRequest*> admit_with_return(SimpleRequest* req);
 
@@ -331,14 +331,15 @@ protected:
     // do we need a simillar function to update our statistics on hit ?
     
     // add data structures for the TinyLFU algorithm 
-    LRU window;
+
     SLRUCache main_cache;
+    LRU window;
     float window_size_p;
 public:
-    W_TinyLFU() : Cache()
+    W_TinyLFU() : Cache(),main_cache(),window()
     {
-        window=LRU();
-        main_cache=SLRUCache();
+       // window=LRU();
+       // =SLRUCache();
         window_size_p=0.01;
         // We have this from Cache() 
          //: _cacheSize -> setSize(cacheSize) from the script
