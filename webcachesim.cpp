@@ -35,12 +35,17 @@ int main (int argc, char* argv[])
   string paramSummary;
   for(int i=4; i<argc; i++) {
     regex_match (argv[i],opmatch,opexp);
-    if(opmatch.size()!=3) {
-      cerr << "each cacheParam needs to be in form name=value" << endl;
-      return 1;
-    }
-    webcache->setPar(opmatch[1], opmatch[2]);
-    paramSummary += opmatch[2];
+    //std::cout <<" regex match size = " << opmatch.size() << endl;
+    //std::cout << "REGEX : 0 " << opmatch[0] << " 1 " << opmatch[1] << " 2 " << opmatch[2] << " 3 " <<  opmatch[3] << 'n';
+    //  if(opmatch.size()!=3) {
+    //   cerr << "each cacheParam needs to be in form name=value" << endl;
+    //   return 1;
+    // }
+
+    //webcache->setPar(opmatch[1], opmatch[2]);
+    char* x="hello";
+    webcache->setPar(x,x);
+    //paramSummary += opmatch[2];
   }
 
   ifstream infile;
@@ -57,10 +62,10 @@ int main (int argc, char* argv[])
         //cout << "reading line" << endl;
         req->reinit(id,size);
         if(webcache->lookup(req)) {
-        cout << "obj hit "<< id << endl;
+       // cout << "obj hit "<< id << endl;
             hits++;
         } else {
-        cout << "obj miss "<< id << endl;
+        //cout << "obj miss "<< id << endl;
             webcache->admit(req);
         }
     }

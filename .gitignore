@@ -35,3 +35,5 @@
 # other tmp files
 *.log
 *.txt
+
+.vs

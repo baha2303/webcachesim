@@ -278,7 +278,8 @@ public:
     {
         segments[0] = LRUCache();
         segments[1] = LRUCache();
-       cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
+       //cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
+       cm_sketch = CM_Init(4000, 4, 319062105);
     }
 
     virtual ~SLRUCache()
@@ -314,11 +315,11 @@ class LRU : public LRUCache {
 
     }
     virtual ~LRU() {}
-    virtual bool lookup(SimpleRequest* req) {}
-    virtual void admit(SimpleRequest* req) {}
-    virtual void evict(SimpleRequest* req) {}
-    virtual void evict() {}
-    virtual SimpleRequest* evict_return() {}
+    // virtual bool lookup(SimpleRequest* req) {}
+    // virtual void admit(SimpleRequest* req);
+    // virtual void evict(SimpleRequest* req) {}
+    // virtual void evict() {}
+    // virtual SimpleRequest* evict_return() {}
     std::list<SimpleRequest*> admit_with_return(SimpleRequest* req);
 
 };
@@ -336,14 +337,15 @@ protected:
     LRU window;
     float window_size_p;
 public:
-    W_TinyLFU() : Cache(),main_cache(),window()
+    W_TinyLFU() : window_size_p(0.2),Cache(),main_cache(),window()
     {
        // window=LRU();
        // =SLRUCache();
-        window_size_p=0.01;
+        //window_size_p=0.2;
         // We have this from Cache() 
          //: _cacheSize -> setSize(cacheSize) from the script
          //_currentSize
+
     }
     
     virtual ~W_TinyLFU()
