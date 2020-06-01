@@ -683,9 +683,9 @@ void SLRUCache::setSize(uint64_t cs) {
     uint64_t total = cs;
     // The Main cache for the W-TintLFU is 2 segment LRU , 80% for the main protected segment
     // and 20% for the propation segment
-    segments[0].setSize(floor(cs*0.5));
+    segments[0].setSize(floor(cs*0.2));
     total -= cs*0.2;  
-    segments[1].setSize(floor(cs*0.5));
+    segments[1].setSize(floor(cs*0.8));
     total -= cs*0.8;
     // std::cerr << "setsize " << i << " : " << cs/4 << "\n";
     if(total>0) {
@@ -862,20 +862,26 @@ std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
 bool W_TinyLFU::lookup(SimpleRequest* req)
 {
     CacheObject obj(req);
-
+    reqs++;
     //BAHAA added this for debug
     //std::cout << std::endl << std::endl << "Looking for object  " << obj.id <<std::endl;
     bool found = window.lookup(req);
     if (found) {
+        hits++;
+        updateWindowSize(reqs,hits);
         //std::cout << "        Object " << obj.id << " found in window"<< std::endl;
         return true; 
     }
     found = main_cache.lookup(req);
     if (found) {
+        hits++;
+        updateWindowSize( reqs, hits);
       //  std::cout << "        Object " << obj.id << " found in SLRU" <<std::endl;
         return true; 
     }
+  
     //std::cout << "                Object " << obj.id << " not found in cache"<<std::endl;
+     updateWindowSize( reqs, hits);
     return false; 
     //
 
@@ -928,6 +934,60 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
     // } else {
     //     std::cerr << "unrecognized parameter: " << parName << std::endl;
     // }
+
+    main_cache.setSize(_cacheSize*(1-window_size_p));
+    std::cout<< " main_C " << main_cache.getSize() << " " <<_cacheSize*(1-window_size_p) <<  std::endl;
+    window.setSize(_cacheSize*window_size_p);
+    std::cout<<" window  "  << window.getSize() << std::endl;
+}
+void W_TinyLFU::updateWindowSize(int reqs,int hits){
+    if(reqs % (_cacheSize)!=0){
+        return;
+    }
+    double hit_ratio=double(hits)/reqs;
+    std::cout<< " hit ratio : " << hit_ratio <<std::endl;
+        std::cout<< " prev hit ratio : " << prev_hit_ratio <<std::endl;
+
+    if(hit_ratio > prev_hit_ratio ){
+                std::cout<< "zad el hit ratio" <<std::endl;
+
+        if(window_size_p==0.0){
+            window_size_p=0.01;
+        }else if(window_size_p==0.01){
+            window_size_p=0.05;
+        }else{
+            window_size_p+=0.05;
+            if(window_size_p>0.8){
+                window_size_p=0.8;
+            }
+        }
+       prev_hit_ratio = hit_ratio ;
+       
+    }else if(hit_ratio < prev_hit_ratio){
+                        std::cout<< "nqasel hit ratio" <<std::endl;
+
+        if(window_size_p==0.0){
+            window_size_p=0.0;
+        }else if(window_size_p==0.01){
+            window_size_p=0.0;
+        }else if(window_size_p==0.05){
+            window_size_p=0.01;
+        }
+        else{
+            window_size_p-=0.05;
+        }
+        prev_hit_ratio = hit_ratio ;
+    }else{
+            std::cout<< "hon 3m b3ml daymn hit ratio nfso " <<  std::endl;
+
+        return;
+    }
+        std::cout<< "Hon Do in jan" <<std::endl;
+
+    updateSize();
+    return;
+}
+void W_TinyLFU::updateSize() {
 
     main_cache.setSize(_cacheSize*(1-window_size_p));
     std::cout<< " main_C " << main_cache.getSize() << " " <<_cacheSize*(1-window_size_p) <<  std::endl;

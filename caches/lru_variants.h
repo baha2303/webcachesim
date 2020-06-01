@@ -335,9 +335,12 @@ protected:
 
     SLRUCache main_cache;
     LRU window;
-    float window_size_p;
+    double window_size_p;
+    int reqs;
+    int hits;
+    double prev_hit_ratio;
 public:
-    W_TinyLFU() : window_size_p(0.2),Cache(),main_cache(),window()
+    W_TinyLFU() : window_size_p(0.01),Cache(),main_cache(),window()
     {
        // window=LRU();
        // =SLRUCache();
@@ -345,7 +348,9 @@ public:
         // We have this from Cache() 
          //: _cacheSize -> setSize(cacheSize) from the script
          //_currentSize
-
+         reqs=0;
+         hits=0;
+         prev_hit_ratio=0;
     }
     
     virtual ~W_TinyLFU()
@@ -359,6 +364,8 @@ public:
     virtual void setPar(std::string parName, std::string parValue);
     virtual void evict(SimpleRequest* req);
     virtual void evict();
+    void updateWindowSize(int reqs, int hits );
+    void updateSize();
 };
 
 static Factory<W_TinyLFU> factoryW_TinyLFU("W_TinyLFU");
