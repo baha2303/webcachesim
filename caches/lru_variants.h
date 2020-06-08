@@ -295,9 +295,9 @@ public:
     virtual void segment_admit(uint8_t idx, SimpleRequest* req);
     virtual void evict(SimpleRequest* req);
     virtual void evict();
-     void admit_from_window(SimpleRequest* req);
-   void update_tiny_lfu(long long id);
-    SimpleRequest* evict_return(int id);
+    void admit_from_window(SimpleRequest* req);
+    void update_tiny_lfu(long long id);
+    SimpleRequest* evict_return(int);
 };
 
 static Factory<SLRUCache> factorySLRU("SLRU");
@@ -315,6 +315,7 @@ class LRU : public LRUCache {
 
     }
     virtual ~LRU() {}
+    //virtual void setSize(uint64_t cs);
     // virtual bool lookup(SimpleRequest* req) {}
     // virtual void admit(SimpleRequest* req);
     // virtual void evict(SimpleRequest* req) {}
@@ -365,7 +366,8 @@ public:
     virtual void evict(SimpleRequest* req);
     virtual void evict();
     void updateWindowSize(int reqs, int hits );
-    void updateSize();
+    void increaseWindow();
+    void increaseMainCache();
 };
 
 static Factory<W_TinyLFU> factoryW_TinyLFU("W_TinyLFU");

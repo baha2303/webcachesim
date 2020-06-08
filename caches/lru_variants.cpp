@@ -698,7 +698,7 @@ void SLRUCache::setSize(uint64_t cs) {
 bool SLRUCache::lookup(SimpleRequest* req)
 {
         //BAHAA added this for debug
-        CacheObject obj(req);
+    CacheObject obj(req);
     //std::cout << std::endl << std::endl << "Looking in  main_cache for object  " << obj.id <<std::endl;
     for(int i=0; i<2; i++) {
         if(segments[i].lookup(req)) {
@@ -717,6 +717,7 @@ bool SLRUCache::lookup(SimpleRequest* req)
 void SLRUCache::admit(SimpleRequest* req)
 {
     segments[0].admit(req);
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
 void SLRUCache::admit_from_window(SimpleRequest* req)
 {
@@ -772,7 +773,7 @@ void SLRUCache::admit_from_window(SimpleRequest* req)
          //std::cout << "evict from main cache --5-- " << std::endl;
         segments[0].admit(req);
     }
-
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
 
 void SLRUCache::segment_admit(uint8_t idx, SimpleRequest* req)
@@ -789,6 +790,7 @@ void SLRUCache::segment_admit(uint8_t idx, SimpleRequest* req)
         }
         segments[idx].admit(req);
     }
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
 
 void SLRUCache::evict(SimpleRequest* req)
@@ -796,22 +798,23 @@ void SLRUCache::evict(SimpleRequest* req)
     for(int i=0; i<2; i++) {
         segments[i].evict(req);
     }
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
 
 void SLRUCache::evict()
 {
     segments[0].evict();
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
 
 void SLRUCache::update_tiny_lfu(long long id) {
     CM_Update(cm_sketch, id, 1);
 } 
-SimpleRequest* SLRUCache::evict_return(int id) {
-// evict least popular (i.e. last element)
-    if (segments[0].evict_return()!=NULL) {
-        
-    }
-    return NULL;
+SimpleRequest* SLRUCache::evict_return(int segment) {
+// evict least popular (i.e. last element) from desired segment
+    SimpleRequest* req =  segments[segment].evict_return();
+    _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
+    return req;
 
 }
 
@@ -948,49 +951,77 @@ void W_TinyLFU::updateWindowSize(int reqs,int hits){
     std::cout<< " hit ratio : " << hit_ratio <<std::endl;
         std::cout<< " prev hit ratio : " << prev_hit_ratio <<std::endl;
 
-    if(hit_ratio > prev_hit_ratio ){
-                std::cout<< "zad el hit ratio" <<std::endl;
+    if(hit_ratio > prev_hit_ratio ) {
+        std::cout<< "zad el hit ratio" <<std::endl;
 
-        if(window_size_p==0.0){
+        if(window_size_p==0.0) {
             window_size_p=0.01;
-        }else if(window_size_p==0.01){
+        } else if(window_size_p==0.01){
             window_size_p=0.05;
-        }else{
+        } else{
             window_size_p+=0.05;
             if(window_size_p>0.8){
                 window_size_p=0.8;
             }
         }
        prev_hit_ratio = hit_ratio ;
-       
-    }else if(hit_ratio < prev_hit_ratio){
-                        std::cout<< "nqasel hit ratio" <<std::endl;
+       window.setSize(getSize()*window_size_p);
+       increaseWindow();
+
+    } else if (hit_ratio < prev_hit_ratio) {
+        std::cout<< "nqasel hit ratio" <<std::endl;
 
         if(window_size_p==0.0){
             window_size_p=0.0;
-        }else if(window_size_p==0.01){
+        } else if(window_size_p==0.01){
             window_size_p=0.0;
-        }else if(window_size_p==0.05){
+        } else if(window_size_p==0.05){
             window_size_p=0.01;
-        }
-        else{
+        } else{
             window_size_p-=0.05;
         }
         prev_hit_ratio = hit_ratio ;
-    }else{
-            std::cout<< "hon 3m b3ml daymn hit ratio nfso " <<  std::endl;
+        main_cache.setSize(getSize()*(1-window_size_p));
+        increaseMainCache();
 
+    } else {
+        std::cout<< "hon 3m b3ml daymn hit ratio nfso " <<  std::endl;
         return;
     }
-        std::cout<< "Hon Do in jan" <<std::endl;
+        
+    std::cout<< "Hon Do in jan" <<std::endl;
 
-    updateSize();
     return;
 }
-void W_TinyLFU::updateSize() {
+void W_TinyLFU::increaseWindow() {
+
+    // should call resize and not setSize , cause setSize is the normal LRU set size which evicts the extra items
+
+
+    while ( getSize()*(1-window_size_p) < main_cache.getCurrentSize()) {
+
+        SimpleRequest* req =  main_cache.evict_return(0);
+        window.admit(req);
+    }
 
     main_cache.setSize(_cacheSize*(1-window_size_p));
     std::cout<< " main_C " << main_cache.getSize() << " " <<_cacheSize*(1-window_size_p) <<  std::endl;
+    // window.setSize(_cacheSize*window_size_p);
+    // std::cout<<" window  "  << window.getSize() << std::endl;
+}
+void W_TinyLFU::increaseMainCache() {
+
+    // should call resize and not setSize , cause setSize is the normal LRU set size which evicts the extra items
+
+
+    while ( getSize()*(window_size_p) < window.getCurrentSize()) {
+
+        SimpleRequest* req =  window.evict_return();
+        main_cache.admit(req);
+    }
+
+    // window.setSize(_cacheSize*(window_size_p));
+    // std::cout<< " main_C " << main_cache.getSize() << " " <<_cacheSize*(1-window_size_p) <<  std::endl;
     window.setSize(_cacheSize*window_size_p);
     std::cout<<" window  "  << window.getSize() << std::endl;
 }
