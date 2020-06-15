@@ -41,10 +41,8 @@ int main (int argc, char* argv[])
     //   cerr << "each cacheParam needs to be in form name=value" << endl;
     //   return 1;
     // }
-
     //webcache->setPar(opmatch[1], opmatch[2]);
-    char* x="hello";
-    webcache->setPar(x,x);
+    webcache->setPar(argv[4],argv[4]);
     //paramSummary += opmatch[2];
   }
 
@@ -58,6 +56,7 @@ int main (int argc, char* argv[])
   SimpleRequest* req = new SimpleRequest(0, 0);
   while (infile >> t >> id >> size)
     {
+        //std::cout << "Line is : " << t  <<  " " << id <<  " " << size << std::endl;  
         reqs++;
         //cout << "reading line" << endl;
         req->reinit(id,size);

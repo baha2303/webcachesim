@@ -24,7 +24,7 @@ to Creative Commons, 559 Nathan Abbott Way, Stanford, California
 
 #define min(x,y)	((x) < (y) ? (x) : (y))
 #define max(x,y)	((x) > (y) ? (x) : (y))
-#define MAX 31
+#define MAX 15
 double eps;	               /* 1+epsilon = approximation factor */
 double delta;                  /* probability of failure */
 

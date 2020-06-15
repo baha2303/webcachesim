@@ -298,6 +298,8 @@ public:
     void admit_from_window(SimpleRequest* req);
     void update_tiny_lfu(long long id);
     SimpleRequest* evict_return(int);
+    int getCurrentSegmentSize(int seg);
+    int getSegmentSize(int seg);
 };
 
 static Factory<SLRUCache> factorySLRU("SLRU");
@@ -336,9 +338,9 @@ protected:
 
     SLRUCache main_cache;
     LRU window;
-    double window_size_p;
-    int reqs;
-    int hits;
+    uint64_t window_size_p;   // the percentage of the window of all cache size [0-100]
+    uint64_t reqs;
+    uint64_t hits;
     double prev_hit_ratio;
 public:
     W_TinyLFU() : window_size_p(0.01),Cache(),main_cache(),window()
@@ -365,7 +367,7 @@ public:
     virtual void setPar(std::string parName, std::string parValue);
     virtual void evict(SimpleRequest* req);
     virtual void evict();
-    void updateWindowSize(int reqs, int hits );
+    void hillClimber(int reqs, int hits );
     void increaseWindow();
     void increaseMainCache();
 };
