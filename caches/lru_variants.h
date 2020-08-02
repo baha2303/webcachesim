@@ -221,21 +221,11 @@ static Factory<S4LRUCache> factoryS4LRU("S4LRU");
 class  TinyLFU : public LRUCache
 {
 protected:
-    // TODO
-    // virtual void hit(lruCacheMapType::const_iterator it, uint64_t size);
-    // do we need a simillar function to update our statistics on hit ?
-    void update_tiny_lfu(long long id);
-    // add data structures for the TinyLFU algorithm 
     CM_type *cm_sketch;
-public:
-    TinyLFU()
-        : LRUCache()
-    {
+    void update_tiny_lfu(long long id);
 
-        // We have this from Cache() 
-         //: _cacheSize -> setSize(cacheSize) from the script
-         //_currentSize
-    }
+public:
+    TinyLFU() : LRUCache() {}
     
     virtual ~TinyLFU()
     {
@@ -244,7 +234,7 @@ public:
 
     virtual void setSize(uint64_t cs) {
         //std::cout << "CM_Init" << std::endl;
-        cm_sketch = CM_Init(cs / 4, 4, 319062105);
+        cm_sketch = CM_Init(cs / 4, 4, 1033096058);
         //std::cout << "CM_init  " << cm_sketch->depth <<" , " <<   cm_sketch->width << std::endl;
        // if (!cm_sketch)
        // std::cout << "CM fails" << std::endl;
@@ -272,22 +262,21 @@ protected:
     LRUCache segments[2];
 
 public:
-  CM_type *cm_sketch;
+    CM_type *cm_sketch;
+    Door_keeper * dk;
     SLRUCache()
         : Cache()   
     {
         segments[0] = LRUCache();
         segments[1] = LRUCache();
-       //cm_sketch = CM_Init(_cacheSize / 4, 4, 319062105);
-       cm_sketch = CM_Init(4000, 4, 319062105);
+
     }
 
     virtual ~SLRUCache()
     {
-     CM_Destroy(cm_sketch);
+        Door_keeper_Destroy(dk);
+        CM_Destroy(cm_sketch);
     }
-
-  
 
     virtual void setSize(uint64_t cs);
     virtual bool lookup(SimpleRequest* req);
@@ -297,6 +286,8 @@ public:
     virtual void evict();
     void admit_from_window(SimpleRequest* req);
     void update_tiny_lfu(long long id);
+    void update_door_keeper(long long id) ;
+    int search_door_keeper(long long id);
     SimpleRequest* evict_return(int);
     int getCurrentSegmentSize(int seg);
     int getSegmentSize(int seg);
@@ -318,7 +309,7 @@ class LRU : public LRUCache {
     }
     virtual ~LRU() {}
     //virtual void setSize(uint64_t cs);
-    // virtual bool lookup(SimpleRequest* req) {}
+     //virtual bool lookup(SimpleRequest* req) ;
     // virtual void admit(SimpleRequest* req);
     // virtual void evict(SimpleRequest* req) {}
     // virtual void evict() {}
@@ -330,17 +321,11 @@ class LRU : public LRUCache {
 class  W_TinyLFU : public Cache
 {
 protected:
-    // TODO
-    // virtual void hit(lruCacheMapType::const_iterator it, uint64_t size);
-    // do we need a simillar function to update our statistics on hit ?
-    
-    // add data structures for the TinyLFU algorithm 
 
-    SLRUCache main_cache;
+    SLRUCache main_cache;       // TinyLFU-CM-Sketch implemented in the SLRU
     LRU window;
-    uint64_t window_size_p;   // the percentage of the window of all cache size [0-100]
-    uint64_t reqs;
-    uint64_t hits;
+    uint64_t window_size_p;     // the percentage of the window of all cache size [0-100]
+    uint64_t reqs,hits;         // for the hillClimber algorithm
     double prev_hit_ratio;
 public:
     W_TinyLFU() : window_size_p(0.01),Cache(),main_cache(),window()

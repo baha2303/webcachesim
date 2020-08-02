@@ -25,7 +25,7 @@ to Creative Commons, 559 Nathan Abbott Way, Stanford, California
 #define min(x,y)	((x) < (y) ? (x) : (y))
 #define max(x,y)	((x) > (y) ? (x) : (y))
 #define MAX 15
-double eps;	               /* 1+epsilon = approximation factor */
+double eps;	                   /* 1+epsilon = approximation factor */
 double delta;                  /* probability of failure */
 
 //int bits=32;
@@ -127,24 +127,27 @@ void CM_Reset(CM_type * cm){
       cm->counts[j][i]= cm->counts[j][i]/2;
     }
   }
+  //printf("CM SKETCH RESTING\n")
   return;
 }
-void CM_Update(CM_type * cm, unsigned int item, int diff)
+int CM_Update(CM_type * cm, unsigned int item, int diff)
 {
   int j;
 
-  if (!cm) return;
+  if (!cm) return -1;
   //printf("CM_Update\n depth %d , width %d : ",cm->depth,cm->width);
   cm->count+=diff;
   for (j=0;j<cm->depth;j++)
     cm->counts[j][hash31(cm->hasha[j],cm->hashb[j],item) % cm->width]+=diff;
+    
 
   for (j=0;j<cm->depth;j++){
     if(cm->counts[j][hash31(cm->hasha[j],cm->hashb[j],item) % cm->width]>=MAX){
       CM_Reset(cm);
-      break;
+      return MAX;
     }
   }
+  return -1;
   //printf("CM_Update finished\n");
   // this can be done more efficiently if the width is a power of two
 }
@@ -759,4 +762,134 @@ long long CMH_F2Est(CMH_type * cmh)
 	result=min(result,est);
     }
   return result;
+}
+
+/******************************************************************************************
+ * Routines to support  Door Keeper 
+*******************************************************************************************/
+
+
+Door_keeper * Door_keeper_Init(int width, int depth, int seed)
+{     // Initialize the sketch based on user-supplied size
+  Door_keeper * dk;
+  int j;
+  prng_type * prng;
+
+  dk=(Door_keeper *) malloc(sizeof(Door_keeper));
+  prng=prng_Init(-abs(seed),2); 
+  // initialize the generator to pick the hash functions
+
+  if (dk && prng)
+    {
+      dk->depth=depth;
+      dk->width=width;
+      dk->count=0;
+      dk->counts=(int **)calloc(sizeof(int *),dk->depth);
+      dk->counts[0]=(int *)calloc(sizeof(int), dk->depth*dk->width);
+      dk->hasha=(unsigned int *)calloc(sizeof(unsigned int),dk->depth);
+      dk->hashb=(unsigned int *)calloc(sizeof(unsigned int),dk->depth);
+      if (dk->counts && dk->hasha && dk->hashb && dk->counts[0])
+	{
+	  for (j=0;j<depth;j++)
+	    {
+	      dk->hasha[j]=prng_int(prng) & MOD;
+	      dk->hashb[j]=prng_int(prng) & MOD;
+	      // pick the hash functions
+	      dk->counts[j]=(int *) dk->counts[0]+(j*dk->width);
+	    }
+	}
+      else dk=NULL;
+    }
+  return dk;
+}
+
+Door_keeper * Door_keeper_Copy(Door_keeper * dkold)
+{     // create a new sketch with the same parameters as an existing one
+  Door_keeper * dk;
+  int j;
+
+  if (!dkold) return(NULL);
+  dk=(Door_keeper *) malloc(sizeof(Door_keeper));
+  if (dk)
+    {
+      dk->depth=dkold->depth;
+      dk->width=dkold->width;
+      dk->count=0;
+      dk->counts=(int **)calloc(sizeof(int *),dk->depth);
+      dk->counts[0]=(int *)calloc(sizeof(int), dk->depth*dk->width);
+      dk->hasha=(unsigned int *)calloc(sizeof(unsigned int),dk->depth);
+      dk->hashb=(unsigned int *)calloc(sizeof(unsigned int),dk->depth);
+      if (dk->counts && dk->hasha && dk->hashb && dk->counts[0])
+	{
+	  for (j=0;j<dk->depth;j++)
+	    {
+	      dk->hasha[j]=dkold->hasha[j];
+	      dk->hashb[j]=dkold->hashb[j];
+	      dk->counts[j]=(int *) dk->counts[0]+(j*dk->width);
+	    }
+	}
+      else dk=NULL;
+    }
+  return dk;
+}
+
+void Door_keeper_Destroy(Door_keeper * dk)
+{     // get rid of a sketch and free up the space
+  if (!dk) return;
+  if (dk->counts)
+    {
+      if (dk->counts[0]) free(dk->counts[0]);
+      free(dk->counts);
+      dk->counts=NULL;
+    }
+  if (dk->hasha) free(dk->hasha); dk->hasha=NULL;
+  if (dk->hashb) free(dk->hashb); dk->hashb=NULL;
+  free(dk);  dk=NULL;
+}
+
+int Door_keeper_Size(Door_keeper * dk)
+{ // return the size of the sketch in bytes
+  int counts, hashes, admin;
+  if (!dk) return 0;
+  admin=sizeof(CM_type);
+  counts=dk->width*dk->depth*sizeof(int);
+  hashes=dk->depth*2*sizeof(unsigned int);
+  return(admin + hashes + counts);
+}
+void Door_keeper_Reset(Door_keeper * dk){
+  for (int j=0;j<dk->depth;j++){
+    for(int i=0;i<dk->width;i++){
+      dk->counts[j][i]=0;
+    }
+  }
+  //printf("CM SKETCH RESTING\n")
+  return;
+}
+void Door_keeper_Update(Door_keeper * dk, unsigned int item, int diff)
+{
+  int j;
+
+  if (!dk) return;
+  //printf("CM_Update\n depth %d , width %d : ",cm->depth,cm->width);
+  dk->count+=diff;
+  for (j=0;j<dk->depth;j++)
+    dk->counts[j][hash31(dk->hasha[j],dk->hashb[j],item) % dk->width]=diff;
+  //printf("CM_Update finished\n");
+  // this can be done more efficiently if the width is a power of two
+}
+
+int Door_keeper_PointEst(Door_keeper * dk, unsigned int query)
+{
+  // return an estimate of the count of an item by taking the minimum
+  int j, ans;
+
+  if (!dk) return 0;
+  ans=dk->counts[0][hash31(dk->hasha[0],dk->hashb[0],query) % dk->width];
+
+
+
+ for (j=1;j<dk->depth;j++)
+    ans=min(ans,dk->counts[j][hash31(dk->hasha[j],dk->hashb[j],query)%dk->width]);
+  // this can be done more efficiently if the width is a power of two
+  return ans;
 }

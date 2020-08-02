@@ -27,7 +27,7 @@ extern CM_type * CM_Copy(CM_type *);
 extern void CM_Destroy(CM_type *);
 extern int CM_Size(CM_type *);
 
-extern void CM_Update(CM_type *, unsigned int, int); 
+extern int CM_Update(CM_type *, unsigned int, int); 
 extern int CM_PointEst(CM_type *, unsigned int);
 extern int CM_PointMed(CM_type *, unsigned int);
 extern int CM_InnerProd(CM_type *, CM_type *);
@@ -67,3 +67,19 @@ extern int CMH_FindRange(CMH_type * cmh, int);
 extern int CMH_Quantile(CMH_type *cmh,float);
 extern long long CMH_F2Est(CMH_type *);
 
+typedef struct DK_type{
+  int count;
+  int depth;
+  int width;
+  int ** counts;
+  unsigned int *hasha, *hashb;
+} Door_keeper;
+
+extern Door_keeper * Door_keeper_Init(int, int, int);
+extern Door_keeper * Door_keeper_Copy(Door_keeper *);
+extern void Door_keeper_Destroy(Door_keeper *);
+extern int Door_keeper_Size(Door_keeper *);
+
+extern void Door_keeper_Update(Door_keeper *, unsigned int, int); 
+extern int Door_keeper_PointEst(Door_keeper *, unsigned int);
+extern void Door_keeper_Reset(Door_keeper *);

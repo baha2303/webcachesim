@@ -56,6 +56,7 @@ int main (int argc, char* argv[])
   SimpleRequest* req = new SimpleRequest(0, 0);
   while (infile >> t >> id >> size)
     {
+      //cout << "looking for  object  " << id << endl;
         //std::cout << "Line is : " << t  <<  " " << id <<  " " << size << std::endl;  
         reqs++;
         //cout << "reading line" << endl;

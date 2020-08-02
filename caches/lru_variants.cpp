@@ -15,7 +15,9 @@
 
 
 // factor for hill climber window size change interval. every (HILL_CLIMBER_FACTOR * cache_size ) requests we will update the window size
-#define HILL_CLIMBER_FACTOR 5
+#define USE_HILL_CLIMBER false
+#define HILL_CLIMBER_FACTOR 1
+#define MAX 15
 
 // math model below can be directly copiedx
 // static inline double oP1(double T, double l, double p) {
@@ -583,19 +585,50 @@ bool TinyLFU::lookup(SimpleRequest* req)
     
     // CacheObject: defined in cache_object.h 
     CacheObject obj(req);
-    
+    // Update the TinyLFU with the new object
+    update_tiny_lfu(obj.id);
     //std::cout << "looking for object id : " << obj.id << std::endl;
     // _cacheMap defined in class LRUCache in lru_variants.h 
     auto it = _cacheMap.find(obj);
     if (it != _cacheMap.end()) {
         // log hit
         LOG("h", 0, obj.id, obj.size);
-        update_tiny_lfu(obj.id);
+
         hit(it, obj.size);
         return true;
     }
     return false;
 }
+void TinyLFU::admit(SimpleRequest* req)
+{
+    const uint64_t size = req->getSize();
+    // object feasible to store?
+    if (size > _cacheSize) {
+        LOG("L", _cacheSize, req->getId(), size);
+        return;
+    }
+    // check eviction needed
+    bool evicted=true;
+    while (_currentSize + size > _cacheSize) {
+        evicted = evict(req->getId());
+		if(!evicted) break;
+        // if the last element not evicted, then it's frequency is better than the candidate, thus not admitting the candidate this time
+    }
+
+    // admit new object
+    if (evicted) {
+        CacheObject obj(req);
+        _cacheList.push_front(obj);
+        _cacheMap[obj] = _cacheList.begin();
+        _currentSize += size;
+        LOG("a", _currentSize, obj.id, obj.size);
+        // Update the TinyLFU with the new object
+       //update_tiny_lfu(obj.id);
+
+    }
+
+}
+
 
 
 SimpleRequest* TinyLFU::evict_return(int cand_id)
@@ -612,59 +645,29 @@ SimpleRequest* TinyLFU::evict_return(int cand_id)
         int victim_freq_est = CM_PointEst(cm_sketch, obj.id);
         int candidate_freq_est = CM_PointEst(cm_sketch, cand_id);
 
-        if (victim_freq_est > candidate_freq_est) {
+
+        // std::cout << "Point estimations : victim id : " <<  obj.id << " candidate id: " << cand_id;
+        // std::cout << " victim f: " << victim_freq_est << " candidate f : " << candidate_freq_est << std::endl;
+
+        if (victim_freq_est < candidate_freq_est) {
             _currentSize -= obj.size;
             _cacheMap.erase(obj);
             _cacheList.erase(lit);
+            //std::cout << " victim " << obj.id << " out" <<std::endl;
+            return req;
         }
         else {
-
             return NULL;
-        }
-
-        return req;
+        }   
     }
     return NULL;
 }
 
 bool TinyLFU::evict(int cand_id)
 {
+    //TODO: should delete returned req from evict_return. MEM LEAK
     return ((evict_return(cand_id) == NULL) ? false : true);
 }
-
-void TinyLFU::admit(SimpleRequest* req)
-{
-    const uint64_t size = req->getSize();
-    // object feasible to store?
-    if (size > _cacheSize) {
-        LOG("L", _cacheSize, req->getId(), size);
-        return;
-    }
-    // check eviction needed
-    bool evicted=true;
-    while (_currentSize + size > _cacheSize) {
-        evicted = evict(req->getId());
-		if(!evicted) break;
-
-    }
-
-    // admit new object
-    if (evicted) {
-        CacheObject obj(req);
-        _cacheList.push_front(obj);
-        _cacheMap[obj] = _cacheList.begin();
-        _currentSize += size;
-        LOG("a", _currentSize, obj.id, obj.size);
-        // Update the TinyLFU with the new object
-        update_tiny_lfu(obj.id);
-
-    }
-
-}
-
-
-
-
 
 //######################################################################
 //######################################################################
@@ -677,8 +680,10 @@ void SLRUCache::setSize(uint64_t cs) {
     uint64_t total = cs;
     // The Main cache for the W-TintLFU is 2 segment LRU , 80% for the main protected segment
     // and 20% for the propation segment
+    cm_sketch = CM_Init(cs/4, 4, 1033096058);
+    dk= Door_keeper_Init(cs/4, 4, 1033096058);
     segments[0].setSize(floor(cs*0.2));
-    total -= cs*0.2;  
+    total -= cs*0.2;
     segments[1].setSize(floor(cs*0.8));
     total -= cs*0.8;
     if(total>0) {
@@ -689,8 +694,6 @@ void SLRUCache::setSize(uint64_t cs) {
 
 bool SLRUCache::lookup(SimpleRequest* req)
 {
-        //BAHAA added this for debug
-    CacheObject obj(req);
     for(int i=0; i<2; i++) {
         if(segments[i].lookup(req)) {
             // hit
@@ -714,7 +717,7 @@ void SLRUCache::admit_from_window(SimpleRequest* req)
 {
 
 // this request comes from the window victim
-// need to compare this with a victom from the first segment an
+// need to compare this with a victom from the first segment and decide who stays
 
     //segments[0].admit(req);
     CacheObject obj(req);
@@ -741,8 +744,9 @@ void SLRUCache::admit_from_window(SimpleRequest* req)
 
 
         LOG("a", _currentSize, obj.id, obj.size);
-        int victim_freq_est = CM_PointEst(cm_sketch, prevEvicted->getId());
-        int candidate_freq_est = CM_PointEst(cm_sketch, req->getId());
+        int victim_freq_est = CM_PointEst(cm_sketch, prevEvicted->getId())+Door_keeper_PointEst(dk,prevEvicted->getId());
+        int candidate_freq_est = CM_PointEst(cm_sketch, req->getId())+Door_keeper_PointEst(dk,req->getId());
+
         // Update the TinyLFU with the new object
 
         if (victim_freq_est > candidate_freq_est) {
@@ -790,8 +794,20 @@ void SLRUCache::evict()
 }
 
 void SLRUCache::update_tiny_lfu(long long id) {
-    CM_Update(cm_sketch, id, 1);
+    int c=CM_Update(cm_sketch, id, 1);
+    if(c==MAX){
+        Door_keeper_Reset(dk);
+    }
+}
+
+void SLRUCache::update_door_keeper(long long id) {
+    Door_keeper_Update(dk, id, 1);
 } 
+
+int SLRUCache::search_door_keeper(long long id) {
+
+    return Door_keeper_PointEst(dk,id);
+}
 SimpleRequest* SLRUCache::evict_return(int segment) {
 // evict least popular (i.e. last element) from desired segment
     SimpleRequest* req =  segments[segment].evict_return();
@@ -816,7 +832,6 @@ int SLRUCache::getSegmentSize(int seg){
 //######################################################################
 //######################################################################
 // LRU window Cache . 
-
 std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
     const uint64_t size = req->getSize();
     // object feasible to store?
@@ -859,12 +874,19 @@ std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
 bool W_TinyLFU::lookup(SimpleRequest* req)
 {
     reqs++;
-    hillClimber(reqs,hits);
+       
+    if(main_cache.search_door_keeper(req->getId())) {
         main_cache.update_tiny_lfu(req->getId());
+    }
     if( window.lookup(req) || main_cache.lookup(req) ) {
+        main_cache.update_door_keeper(req->getId());
         hits++;
+        if(USE_HILL_CLIMBER)
+             hillClimber(reqs,hits);
         return true;
     } else {
+        if(USE_HILL_CLIMBER)
+             hillClimber(reqs,hits);
         // object not found
         return false;
     }
@@ -874,6 +896,13 @@ bool W_TinyLFU::lookup(SimpleRequest* req)
 
 void W_TinyLFU::admit(SimpleRequest* req)
 {
+
+    if(main_cache.search_door_keeper(req->getId())) {
+
+    } else{
+        main_cache.update_door_keeper(req->getId());
+        return;
+    }
     CacheObject obj(req);
    // std::cout << "Admitting object  " << obj.id <<std::endl;
    if(window.getSize()==0) {
@@ -881,7 +910,7 @@ void W_TinyLFU::admit(SimpleRequest* req)
         return;
    }
     std::list<SimpleRequest*> req_list = window.admit_with_return(req);
-    main_cache.update_tiny_lfu(req->getId());
+   // main_cache.update_tiny_lfu(req->getId()); // this causes some drops in some tests
     if(req_list.size()==0) {
         //std::cout << " object  " << obj.id << " admitted to window cache " << std::endl;
         return;
@@ -900,7 +929,7 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
     //std::cerr << "parName  " << parName << " parValue = " << parValue << std::endl;
 
     // if(parName.compare("window") == 0) {
-        window_size_p = std::stoull(parValue);
+    window_size_p = std::stoull(parValue);
     //     assert(n>0);
     //     window_size_p = n/100;
     //     main_cache.setSize(_cacheSize*(1-window_size_p));
@@ -939,8 +968,13 @@ void W_TinyLFU::hillClimber(int reqs,int hits){
 
     } else if (hit_ratio < prev_hit_ratio) {
 
-        if(window_size_p==0){
+            // window_size_p-=1;
+            // if(window_size_p<0){
+            //     window_size_p=0;
+            // }
 
+       if(window_size_p==0){
+ 
         } else if(window_size_p==1) {
 
             window_size_p=0;
@@ -979,10 +1013,9 @@ void W_TinyLFU::increaseWindow() {
 }
 void W_TinyLFU::increaseMainCache() {
 
-
     SimpleRequest* req; 
     while ( getSize()*(double(window_size_p)/100) < window.getCurrentSize()) {
-        SimpleRequest* req =  window.evict_return();
+        req =  window.evict_return();
         if(main_cache.getCurrentSegmentSize(0)>=main_cache.getSegmentSize(0)){
                 main_cache.segment_admit(1,req);
         } else{
