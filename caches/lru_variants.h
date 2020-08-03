@@ -285,12 +285,13 @@ public:
     virtual void evict(SimpleRequest* req);
     virtual void evict();
     void admit_from_window(SimpleRequest* req);
-    void update_tiny_lfu(long long id);
+    void update_cm_sketch(long long id);
     void update_door_keeper(long long id) ;
     int search_door_keeper(long long id);
     SimpleRequest* evict_return(int);
     int getCurrentSegmentSize(int seg);
     int getSegmentSize(int seg);
+    void initDoor_initCM(uint64_t cs);
 };
 
 static Factory<SLRUCache> factorySLRU("SLRU");

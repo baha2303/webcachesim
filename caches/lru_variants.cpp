@@ -13,10 +13,11 @@
 #define SHFT2(a,b,c) (a)=(b);(b)=(c);
 #define SHFT3(a,b,c,d) (a)=(b);(b)=(c);(c)=(d);
 
-
+// To turn on the adaptive window put the constant to true otherwise false
+#define USE_HILL_CLIMBER true 
 // factor for hill climber window size change interval. every (HILL_CLIMBER_FACTOR * cache_size ) requests we will update the window size
-#define USE_HILL_CLIMBER false
-#define HILL_CLIMBER_FACTOR 1
+#define HILL_CLIMBER_FACTOR 1 
+// the maximum frequancy that an object can reach before making a Reset to all the frequancies
 #define MAX 15
 
 // math model below can be directly copiedx
@@ -569,7 +570,13 @@ void S4LRUCache::evict()
 */
 
 /*****HELPER FUNCTIONS******/
-
+/*!
+ * @function    update_tiny_lfu.
+ * @abstract    Updates the frequancy of an object with ID id.
+ * @discussion  This function is a wrapper function for the CM_scketch 
+ *              updating function.
+ * @param       id    The ID of an object.
+*/
 void TinyLFU::update_tiny_lfu(long long id) {
 
     CM_Update(cm_sketch, id, 1);
@@ -577,17 +584,21 @@ void TinyLFU::update_tiny_lfu(long long id) {
 }
 
 
-
 /*****CACHE FUNCTIONS******/
+/*!
+ * @function    lookup.
+ * @abstract    Searching an object with the request req in the cache.
+ * @discussion  This function looks up the opbject in the cache 
+ *              and updates the frequancy of this object.
+ * @param       req    The request of an object.
+ * @result      true if the object is in the cache , false if it's not in the cache.
+*/
 bool TinyLFU::lookup(SimpleRequest* req)
 {
-
-    
     // CacheObject: defined in cache_object.h 
     CacheObject obj(req);
     // Update the TinyLFU with the new object
     update_tiny_lfu(obj.id);
-    //std::cout << "looking for object id : " << obj.id << std::endl;
     // _cacheMap defined in class LRUCache in lru_variants.h 
     auto it = _cacheMap.find(obj);
     if (it != _cacheMap.end()) {
@@ -599,6 +610,13 @@ bool TinyLFU::lookup(SimpleRequest* req)
     }
     return false;
 }
+/*!
+ * @function    admit.
+ * @abstract    Admits the object with the request req to the cache.
+ * @discussion  This function tries to admit an object to the cache after
+ *              we had a miss in cache for this object.
+ * @param       req    The request of an object.
+*/
 void TinyLFU::admit(SimpleRequest* req)
 {
     const uint64_t size = req->getSize();
@@ -614,7 +632,6 @@ void TinyLFU::admit(SimpleRequest* req)
 		if(!evicted) break;
         // if the last element not evicted, then it's frequency is better than the candidate, thus not admitting the candidate this time
     }
-
     // admit new object
     if (evicted) {
         CacheObject obj(req);
@@ -623,14 +640,17 @@ void TinyLFU::admit(SimpleRequest* req)
         _currentSize += size;
         LOG("a", _currentSize, obj.id, obj.size);
         // Update the TinyLFU with the new object
-       //update_tiny_lfu(obj.id);
-
     }
-
 }
-
-
-
+/*!
+ * @function    evict_return.
+ * @abstract    Eviction of one object from the cache.
+ * @discussion  This function evicts an object which can be from the cache
+ *              if it's frequancy is smaller than the object with ID cand_id
+ *              otherwise it doesn't add the object with the ID cand_id to the cache.
+ * @param       cand_id    The ID of an object.
+ * @result      A pointer to the request of an object that has been evicted by the function.
+*/
 SimpleRequest* TinyLFU::evict_return(int cand_id)
 {
     // evict least popular (i.e. last element)
@@ -645,15 +665,10 @@ SimpleRequest* TinyLFU::evict_return(int cand_id)
         int victim_freq_est = CM_PointEst(cm_sketch, obj.id);
         int candidate_freq_est = CM_PointEst(cm_sketch, cand_id);
 
-
-        // std::cout << "Point estimations : victim id : " <<  obj.id << " candidate id: " << cand_id;
-        // std::cout << " victim f: " << victim_freq_est << " candidate f : " << candidate_freq_est << std::endl;
-
         if (victim_freq_est < candidate_freq_est) {
             _currentSize -= obj.size;
             _cacheMap.erase(obj);
             _cacheList.erase(lit);
-            //std::cout << " victim " << obj.id << " out" <<std::endl;
             return req;
         }
         else {
@@ -662,7 +677,14 @@ SimpleRequest* TinyLFU::evict_return(int cand_id)
     }
     return NULL;
 }
-
+/*!
+ * @function    evict.
+ * @abstract    Eviction of one object from the cache.
+ * @discussion  This function is a wrapper function of evict_return,
+ *              it checks if the evict_return evicted an object from the cache or not.
+ * @param       cand_id    The ID of an object.
+ * @result      true if evict_return evicted an object from the cache , false otherwise.
+*/
 bool TinyLFU::evict(int cand_id)
 {
     //TODO: should delete returned req from evict_return. MEM LEAK
@@ -676,12 +698,18 @@ bool TinyLFU::evict(int cand_id)
     SLRU -> 2 Segments LRU cache
     Will be used as the main cahce for the W-TinyLFU
 */
+/*!
+ * @function    setSize.
+ * @abstract    Sets the size of the main cache.
+ * @discussion  This function sets the size of the main cache and
+ *              splits this size into two segments the first segment takes 20% of the size
+ *              and the second takes 80%.
+ * @param       cs    The size of the main cache.
+*/
 void SLRUCache::setSize(uint64_t cs) {
     uint64_t total = cs;
     // The Main cache for the W-TintLFU is 2 segment LRU , 80% for the main protected segment
     // and 20% for the propation segment
-    cm_sketch = CM_Init(cs/4, 4, 1033096058);
-    dk= Door_keeper_Init(cs/4, 4, 1033096058);
     segments[0].setSize(floor(cs*0.2));
     total -= cs*0.2;
     segments[1].setSize(floor(cs*0.8));
@@ -691,7 +719,24 @@ void SLRUCache::setSize(uint64_t cs) {
     }
     _cacheSize=cs;
 }
-
+/*!
+ * @function    initDoor_initCM.
+ * @abstract    Initial the door keeper and the cm_sketch.
+ * @param       cs    The size of the Cache =window + main cache.
+*/
+void SLRUCache::initDoor_initCM(uint64_t cs){
+    cm_sketch = CM_Init(cs/4, 4, 1033096058);
+    dk= Door_keeper_Init(cs/4, 4, 1033096058);
+}
+/*!
+ * @function    lookup.
+ * @abstract    Searches the cache to find the object with request req.
+ * @discussion  This function looks up the object with request req 
+ *              in the two segements of the cache 
+ *              if it's found in the first segment move it to the second segment.
+ * @param       req    The request of an object.
+ * @result      true if we found the object with request req otherwise false
+*/
 bool SLRUCache::lookup(SimpleRequest* req)
 {
     for(int i=0; i<2; i++) {
@@ -707,18 +752,33 @@ bool SLRUCache::lookup(SimpleRequest* req)
     }
     return false;
 }
-
+/*!
+ * @function    admit.
+ * @abstract    Admits an object with request req to the cache.
+ * @discussion  This function admits an object with request req
+ *              to the first segment of the cache.
+ * @param       req    The request of an object.
+*/
 void SLRUCache::admit(SimpleRequest* req)
 {
     segments[0].admit(req);
     _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
+/*!
+ * @function    admit_from_window.
+ * @abstract    Admits an object with request req "that is the victim of window cache"
+ *              to the main cache.
+ * @discussion  This function tries to admit a victim of the window cache with request req
+ *              to the first segment of the mian cache
+ *              by comparing the frequancy of the victim to the frequancy 
+ *              of a candidate from the main cache that is the LRU , 
+ *              if the frequancy of the victim is smaller don't admit it .
+ * @param       req    The request of an object.
+*/
 void SLRUCache::admit_from_window(SimpleRequest* req)
 {
-
 // this request comes from the window victim
 // need to compare this with a victom from the first segment and decide who stays
-
     //segments[0].admit(req);
     CacheObject obj(req);
     const uint64_t size = req->getSize();
@@ -732,17 +792,13 @@ void SLRUCache::admit_from_window(SimpleRequest* req)
     while (segments[0].getCurrentSize() + size >segments[0].getSize()) {
         evicted = segments[0].evict_return();
 		if(evicted==NULL) break;
-
         prevEvicted=evicted;
-        // TODO
         // which to evict ? how to evict ? how to compare between victim and candidate
         // what if we need to evict more than one object
     }
 
     // admit new object
     if (prevEvicted!=NULL) {
-
-
         LOG("a", _currentSize, obj.id, obj.size);
         int victim_freq_est = CM_PointEst(cm_sketch, prevEvicted->getId())+Door_keeper_PointEst(dk,prevEvicted->getId());
         int candidate_freq_est = CM_PointEst(cm_sketch, req->getId())+Door_keeper_PointEst(dk,req->getId());
@@ -761,7 +817,15 @@ void SLRUCache::admit_from_window(SimpleRequest* req)
     }
     _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
-
+/*!
+ * @function    segment_admit.
+ * @abstract    Admits an object with request req
+ *              to the segment with index idx.
+ * @discussion  This function admits an object with request req
+ *              to the segment with index idx in the mian cache.
+ * @param       idx    The indes of a segment in the main cache.
+ * @param       req    The request of an object.
+*/
 void SLRUCache::segment_admit(uint8_t idx, SimpleRequest* req)
 {
     if(idx==0) {
@@ -778,7 +842,13 @@ void SLRUCache::segment_admit(uint8_t idx, SimpleRequest* req)
     }
     _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
-
+/*!
+ * @function    evict.
+ * @abstract    evicts an object with request req.
+ * @discussion  This function evicts an object with request req
+ *              from the mian cache.
+ * @param       req    The request of an object.
+*/
 void SLRUCache::evict(SimpleRequest* req)
 {
     for(int i=0; i<2; i++) {
@@ -792,22 +862,47 @@ void SLRUCache::evict()
     segments[0].evict();
     _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
 }
-
-void SLRUCache::update_tiny_lfu(long long id) {
+/*!
+ * @function    update_cm_sketch.
+ * @abstract    Update the frequancy of an object with ID id in cm_sketch.
+ * @discussion  This function updates the frequancy of an object with the ID id 
+ *              and resets the door keeper if it's frequancy reachs the maximum .
+ * @param       id    The ID of an object.
+*/
+void SLRUCache::update_cm_sketch(long long id) {
     int c=CM_Update(cm_sketch, id, 1);
     if(c==MAX){
         Door_keeper_Reset(dk);
     }
 }
-
+/*!
+ * @function    update_door_keeper.
+ * @abstract    Update the object with the ID id in the door keeper.
+ * @discussion  This function updates the object with the ID id in the door keeper.
+ * @param       id    The ID of an object.
+*/
 void SLRUCache::update_door_keeper(long long id) {
     Door_keeper_Update(dk, id, 1);
 } 
-
+/*!
+ * @function    search_door_keeper.
+ * @abstract    Search the door keeper to know if the object with the ID id exists in it.
+ * @discussion  This function searches the door keeper to know 
+ *              if the object with the ID id exists in it.
+ * @param       id    The ID of an object.
+ * @result      1 if the object exists , 0 otherwise.
+*/
 int SLRUCache::search_door_keeper(long long id) {
 
     return Door_keeper_PointEst(dk,id);
 }
+/*!
+ * @function    evict_return.
+ * @abstract    Evict least popular (i.e. last element) from desired segment.
+ * @discussion  This function evicts the LRU object in the segment with index segment in the main cache.
+ * @param       segment    The index of asegment in the main cache.
+ * @result      A pointer to the object that has been removed from the segment.
+*/
 SimpleRequest* SLRUCache::evict_return(int segment) {
 // evict least popular (i.e. last element) from desired segment
     SimpleRequest* req =  segments[segment].evict_return();
@@ -815,15 +910,25 @@ SimpleRequest* SLRUCache::evict_return(int segment) {
     return req;
 
 }
-
+/*!
+ * @function    getCurrentSegmentSize.
+ * @abstract    Returns the current size of a segment with index seg.
+ * @param       seg    The index of asegment in the main cache.
+ * @result      The current size.
+*/
 int SLRUCache::getCurrentSegmentSize(int seg){
 
     return segments[seg].getCurrentSize();
 }
+/*!
+ * @function    getSegmentSize.
+ * @abstract    Returns the size of a segment with index seg.
+ * @param       seg    The index of asegment in the main cache.
+ * @result      The size of the segment.
+*/
 int SLRUCache::getSegmentSize(int seg){
 
     return segments[seg].getSize();
-
 }
 
 
@@ -832,6 +937,16 @@ int SLRUCache::getSegmentSize(int seg){
 //######################################################################
 //######################################################################
 // LRU window Cache . 
+
+/*!
+ * @function    admit_with_return.
+ * @abstract    Admit the object with request req to the window cache.
+ * @discussion  This function admits the object with request req to the window cache
+ *              and removes the least recently used objects from the window until 
+ *              the new object fit in the window.
+ * @param       req    The index of asegment in the main cache.
+ * @result      List of pointers to the objects that have been removed from the window.
+*/
 std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
     const uint64_t size = req->getSize();
     // object feasible to store?
@@ -863,20 +978,23 @@ std::list<SimpleRequest*> LRU::admit_with_return(SimpleRequest* req) {
 /*
   W-TinyLFU
 */
-
-/*****HELPER FUNCTIONS******/
-
-
-
-
 /*****CACHE FUNCTIONS******/
 
+/*!
+ * @function    lookup.
+ * @abstract    Search the window and main cache for the object with request req.
+ * @discussion  This function updates the frequancy of the object if it's in the door keeper,
+ *              searches the window and main cache for the object with request req
+ *              if found update the door keeper increace the hit counter,
+ *              use the hill climber algorithm .
+ * @param       req    The request of an object.
+ * @result      true if the object in the one of the caches , false otherwise.
+*/
 bool W_TinyLFU::lookup(SimpleRequest* req)
 {
     reqs++;
-       
     if(main_cache.search_door_keeper(req->getId())) {
-        main_cache.update_tiny_lfu(req->getId());
+        main_cache.update_cm_sketch(req->getId());
     }
     if( window.lookup(req) || main_cache.lookup(req) ) {
         main_cache.update_door_keeper(req->getId());
@@ -891,9 +1009,15 @@ bool W_TinyLFU::lookup(SimpleRequest* req)
         return false;
     }
 }
-
-
-
+/*!
+ * @function    admit.
+ * @abstract    Admit the object with request req to cache.
+ * @discussion  This function updates the door keeper of the object if it's not in the door keeper,
+ *              if the size of the window cache is zero try to admit the object to the main cache,
+ *              if not zero admit it to the window cache and try admiting the victims 
+ *              of the window to the main cache.
+ * @param       req    The request of an object.
+*/
 void W_TinyLFU::admit(SimpleRequest* req)
 {
 
@@ -901,7 +1025,7 @@ void W_TinyLFU::admit(SimpleRequest* req)
 
     } else{
         main_cache.update_door_keeper(req->getId());
-        return;
+       return;
     }
     CacheObject obj(req);
    // std::cout << "Admitting object  " << obj.id <<std::endl;
@@ -939,11 +1063,21 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
     // } else {
     //     std::cerr << "unrecognized parameter: " << parName << std::endl;
     // }
-
-    main_cache.setSize(_cacheSize*(1-(double(window_size_p)/100)));
-
+    uint64_t cs =_cacheSize*(1-(double(window_size_p)/100));
+    main_cache.setSize(cs);
+    main_cache.initDoor_initCM(cs);  //check if coorect
     window.setSize(_cacheSize*(double(window_size_p)/100));
 }
+/*!
+ * @function    hillClimber.
+ * @abstract    Implement the hill climber algorithm to achieve higher hit ratio.
+ * @discussion  This function updates the hit ratio every "cache size multiplied by factor"
+ *              if the hit ratio improved upon last time, increase the window size by 5%,
+ *              if the hit ratio decreased upon last time, decrease the window size by 5%
+ *              else do nothing.
+ * @param       reqs   the number of request .
+ * @param       hits   the number of hits.
+*/
 void W_TinyLFU::hillClimber(int reqs,int hits){
     if(reqs % (HILL_CLIMBER_FACTOR*_cacheSize)!=0){
         return;
@@ -967,12 +1101,6 @@ void W_TinyLFU::hillClimber(int reqs,int hits){
        increaseWindow();
 
     } else if (hit_ratio < prev_hit_ratio) {
-
-            // window_size_p-=1;
-            // if(window_size_p<0){
-            //     window_size_p=0;
-            // }
-
        if(window_size_p==0){
  
         } else if(window_size_p==1) {
@@ -992,12 +1120,10 @@ void W_TinyLFU::hillClimber(int reqs,int hits){
     } else {
         return;
     }
-
     return;
 }
+
 void W_TinyLFU::increaseWindow() {
-
-
     SimpleRequest* req;
     while ( getSize()*(1-double(window_size_p)/100) < main_cache.getCurrentSize()) {
 
@@ -1011,8 +1137,8 @@ void W_TinyLFU::increaseWindow() {
 
     main_cache.setSize(_cacheSize*(1-double(window_size_p)/100));
 }
-void W_TinyLFU::increaseMainCache() {
 
+void W_TinyLFU::increaseMainCache() {
     SimpleRequest* req; 
     while ( getSize()*(double(window_size_p)/100) < window.getCurrentSize()) {
         req =  window.evict_return();
