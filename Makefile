@@ -1,7 +1,7 @@
 TARGET = webcachesim
-OBJS += caches/countmin.o
-OBJS += caches/prng.o
-OBJS += caches/massdal.o
+OBJS += caches/sketch/countmin.o
+OBJS += caches/sketch/prng.o
+OBJS += caches/sketch/massdal.o
 OBJS += caches/lru_variants.o
 OBJS += caches/gd_variants.o
 

@@ -7,7 +7,7 @@
 #include "cache.h"
 #include "cache_object.h"
 #include "adaptsize_const.h" /* AdaptSize constants */
-#include "countmin.h"
+#include "caches/sketch/countmin.h"
 
 
 typedef std::list<CacheObject>::iterator ListIteratorType;
@@ -234,7 +234,7 @@ public:
 
     virtual void setSize(uint64_t cs) {
         //std::cout << "CM_Init" << std::endl;
-        cm_sketch = CM_Init(cs / 4, 4, 1033096058);
+        cm_sketch = CM_Init(cs/2,2, 1033096058);
         //std::cout << "CM_init  " << cm_sketch->depth <<" , " <<   cm_sketch->width << std::endl;
        // if (!cm_sketch)
        // std::cout << "CM fails" << std::endl;

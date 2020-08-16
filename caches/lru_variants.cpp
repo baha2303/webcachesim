@@ -18,7 +18,7 @@
 // factor for hill climber window size change interval. every (HILL_CLIMBER_FACTOR * cache_size ) requests we will update the window size
 #define HILL_CLIMBER_FACTOR 1 
 // the maximum frequancy that an object can reach before making a Reset to all the frequancies
-#define MAX 15
+#define COUNTER_MAX 15
 
 // math model below can be directly copiedx
 // static inline double oP1(double T, double l, double p) {
@@ -725,8 +725,9 @@ void SLRUCache::setSize(uint64_t cs) {
  * @param       cs    The size of the Cache =window + main cache.
 */
 void SLRUCache::initDoor_initCM(uint64_t cs){
-    cm_sketch = CM_Init(cs/4, 4, 1033096058);
-    dk= Door_keeper_Init(cs/4, 4, 1033096058);
+    cm_sketch = CM_Init(cs/2,2, 1033096058);
+
+    dk= Door_keeper_Init(cs, 1, 1033096058);
 }
 /*!
  * @function    lookup.
@@ -763,6 +764,7 @@ void SLRUCache::admit(SimpleRequest* req)
 {
     segments[0].admit(req);
     _currentSize=segments[0].getCurrentSize()+segments[1].getCurrentSize();
+    
 }
 /*!
  * @function    admit_from_window.
@@ -871,7 +873,7 @@ void SLRUCache::evict()
 */
 void SLRUCache::update_cm_sketch(long long id) {
     int c=CM_Update(cm_sketch, id, 1);
-    if(c==MAX){
+    if(c==COUNTER_MAX){
         Door_keeper_Reset(dk);
     }
 }
@@ -1064,8 +1066,10 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
     //     std::cerr << "unrecognized parameter: " << parName << std::endl;
     // }
     uint64_t cs =_cacheSize*(1-(double(window_size_p)/100));
+
+    //TODO try with full cache size
     main_cache.setSize(cs);
-    main_cache.initDoor_initCM(cs);  //check if coorect
+    main_cache.initDoor_initCM(_cacheSize);  //check if coorect
     window.setSize(_cacheSize*(double(window_size_p)/100));
 }
 /*!
