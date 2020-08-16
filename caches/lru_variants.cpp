@@ -725,8 +725,7 @@ void SLRUCache::setSize(uint64_t cs) {
  * @param       cs    The size of the Cache =window + main cache.
 */
 void SLRUCache::initDoor_initCM(uint64_t cs){
-    cm_sketch = CM_Init(cs/2,2, 1033096058);
-
+    cm_sketch = CM_Init(cs/2, 2, 1033096058);
     dk= Door_keeper_Init(cs, 1, 1033096058);
 }
 /*!
@@ -1049,7 +1048,14 @@ void W_TinyLFU::admit(SimpleRequest* req)
         main_cache.admit_from_window(*it);
     }
 }
-
+/*!
+ * @function    setPar.
+ * @abstract    Set the size of main cache and window cache and initial the door keeper and CM_sketch.
+ * @discussion  This function sets the sizes of window and main caches ,adjust the percentage
+ *              of the window cache and the main cache and initial the door keeper and the CM_sketch.
+ * @param       parName   The name of the added parameter .
+ * @param       parValue  The value of the added parameter.
+*/
 void W_TinyLFU::setPar(std::string parName, std::string parValue) {
 
     //std::cerr << "parName  " << parName << " parValue = " << parValue << std::endl;
@@ -1057,10 +1063,7 @@ void W_TinyLFU::setPar(std::string parName, std::string parValue) {
     // if(parName.compare("window") == 0) {
     window_size_p = std::stoull(parValue);
     //     assert(n>0);
-    //     window_size_p = n/100;
-    //     main_cache.setSize(_cacheSize*(1-window_size_p));
     //     std::cout<< " main_C " << main_cache.getSize() << std::endl;
-    //     window.setSize(_cacheSize*window_size_p);
     //     std::cout<<" window  "  << window.getSize() << std::endl;
     // } else {
     //     std::cerr << "unrecognized parameter: " << parName << std::endl;
@@ -1126,32 +1129,47 @@ void W_TinyLFU::hillClimber(int reqs,int hits){
     }
     return;
 }
-
+/*!
+ * @function    increaseWindow.
+ * @abstract    Increase window cache current size and move objects from main cache to window.
+ * @discussion  This function moves objects from main cache to the window cache.
+*/
 void W_TinyLFU::increaseWindow() {
     SimpleRequest* req;
     while ( getSize()*(1-double(window_size_p)/100) < main_cache.getCurrentSize()) {
-
+        // check if the first segment is empty or not
         if(main_cache.getCurrentSegmentSize(0) <= 0){
+                // if empty move an object from the second segment to the window cache
                 req =  main_cache.evict_return(1);
         } else{
+                // if not empty move an object from the first segment to the window cache
                 req =  main_cache.evict_return(0);
         }
         window.admit(req);
     }
-
+    // caclculate the size of the main cache after moving all the objects that had to be moved
     main_cache.setSize(_cacheSize*(1-double(window_size_p)/100));
 }
-
+/*!
+ * @function    increaseMainCache.
+ * @abstract    Increase main cache current size and move objects from window cache to main cache.
+ * @discussion  This function moves objects from window cache to the main cache.
+*/
 void W_TinyLFU::increaseMainCache() {
     SimpleRequest* req; 
     while ( getSize()*(double(window_size_p)/100) < window.getCurrentSize()) {
+        // eveict an object from window cache
         req =  window.evict_return();
+        // check if the first segment is full
         if(main_cache.getCurrentSegmentSize(0)>=main_cache.getSegmentSize(0)){
+            // if full then admit the victim of the window to the secnod segment
                 main_cache.segment_admit(1,req);
         } else{
+            // if not full then admit the victim of the window to the first segment           
                 main_cache.segment_admit(0,req);
         }
     }
+    // calculate the size of the window after removing all the objects that had to be removed
     window.setSize(_cacheSize*double(window_size_p)/100);
 }
 
